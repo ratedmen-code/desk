@@ -106,6 +106,9 @@
     if (!st.positions.length) h += '<div class="card">' + emptyBox("🛡️", "Nothing open", "Risk guards every position from fill to exit. New buys show up here.") + "</div>";
     else h += '<div class="card">' + st.positions.map(posRow).join("") + "</div>";
     h += "<h2>Desk</h2>" + agentGrid();
+    var acts = ((S.activity && S.activity.items) || []).slice(0, 6);
+    h += '<h2>Activity <a class="small mut" href="#/activity" style="float:right;font-weight:400">See all ›</a></h2>';
+    h += '<div class="card">' + (acts.length ? acts.map(actRow).join("") : emptyBox("🌙", "Nothing yet", "Scans, rejections, buys and sells land here as the desk works.")) + "</div>";
     $view.innerHTML = h;
     if (pts.length > 1) drawChart(document.getElementById("bal"), pts.map(function (p) { return p[1]; }), { color: ch >= 0 ? "#00d35a" : "#ff453a", base: start });
   }
@@ -117,12 +120,18 @@
     var a = S.state.agents[key] || {}, c = a.card || {}, set = (S.state.account.settings || {});
     var sv = function (grp, k) { var x = (set[grp] || []).filter(function (s) { return s.key === grp + "." + k; })[0]; return x ? x.value : null; };
     var val = "", sub = "", extra = "";
-    if (key === "scanner") { val = (c.pools || 0) + " pools"; sub = (c.passed || 0) + " → auditor"; }
-    if (key === "auditor") { val = (c.takenApart || 0) + " taken apart"; sub = (c.rejected || 0) + " rejected"; extra = '<div class="strips">' + LAYERS.map(function () { return "<i></i>"; }).join("") + "</div>"; }
-    if (key === "analyst") { val = "Scoring"; sub = (c.scored || 0) + " scored"; extra = ring(c.lastScore, 70); }
-    if (key === "executor") { val = (c.trades || 0) + " trades"; sub = S.state.mode; }
+    if (key === "scanner") { val = (c.pools || 0) + " pools"; sub = (c.passed || 0) + " → auditor · " + (c.killed || 0) + " cut";
+      extra = (c.feed || []).slice(0, 3).map(function (f) { return '<div class="small ' + (f.verdict === "kill" ? "mut" : "up") + '" style="margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+        (f.verdict === "kill" ? '<s style="text-decoration-color:#ff453a">' + esc(f.name) + "</s> · " + esc(f.reason) : esc(f.name) + " · liq " + usd(f.liquidityUsd, 0) + " · → auditor") + "</div>"; }).join(""); }
+    if (key === "auditor") { var la = c.latest, ls = (la && la.layers) || [];
+      val = (c.takenApart || 0) + " taken apart";
+      sub = !la ? (c.rejected || 0) + " rejected" : la.running ? "taking apart..." : la.passed ? "8/8 → Analyst · " + (c.rejected || 0) + " rejected" : la.reason + " · " + (c.rejected || 0) + " rejected";
+      extra = '<div class="strips">' + LAYERS.map(function (n, i) { var l = ls.filter(function (x) { return x.n === i + 1; })[0]; return "<i" + (l ? ' class="' + (l.pass ? "ok" : "bad") + '"' : "") + "></i>"; }).join("") + "</div>"; }
+    if (key === "analyst") { val = "Scoring"; sub = (c.scored || 0) + " scored" + (c.lastName ? " · " + c.lastName : ""); extra = ring(c.lastScore, c.passMark || 70); }
+    if (key === "executor") { var lt = c.last; val = (c.trades || 0) + " trades";
+      sub = !lt ? S.state.mode : lt.status === "bought" ? usd(lt.sizeUsd) + " · " + lt.stackPct + "% of stack · ✓ Filled" : lt.status === "sent" ? usd(lt.sizeUsd) + " · Executing..." : (lt.name || "") + " · " + lt.status + (lt.reason ? " (" + lt.reason + ")" : ""); }
     if (key === "risk") { val = c.open ? "Guarding" : "Idle"; sub = c.lastExit ? (c.lastExit === "trail" ? "Trailed out" : c.lastExit === "stop" ? "Stopped" : c.lastExit) : "no exits yet";
-      extra = '<span class="pill red">stop -' + sv("risk", "stop_pct") + '%</span><span class="pill green">trail ' + sv("risk", "trail_pct") + "%</span>"; }
+      extra = '<span class="pill red">stop -' + (c.stopPct != null ? c.stopPct : sv("risk", "stop_pct")) + '%</span><span class="pill green">trail ' + (c.trailPct != null ? c.trailPct : sv("risk", "trail_pct")) + "%</span>"; }
     return '<div class="card agent"><div class="hd"><span class="nm">' + label + '<span class="beat ' + (a.alive ? "ok" : "") + '"></span></span><span class="n">' + n + "/5</span></div>" +
       '<div class="val">' + esc(val) + '</div><div class="sub">' + esc(sub) + "</div>" + extra + "</div>";
   }
@@ -150,12 +159,13 @@
     var items = (S.activity && S.activity.items) || [];
     var h = "<h2>Activity</h2>";
     if (!items.length) { $view.innerHTML = h + '<div class="card">' + emptyBox("🌙", "Nothing yet", "Scans, rejections, buys and sells land here as the desk works through the night.") + "</div>"; return; }
-    h += '<div class="card">' + items.map(function (it) {
-      var cls = it.tone === "kill" ? "row kill" : "row", tone = it.tone === "good" ? "up" : it.tone === "bad" ? "down" : "mut";
-      var inner = '<div><div class="t">' + esc(it.title) + '</div><div class="s">' + esc(it.subtitle) + " · " + hhmm(it.ts) + '</div></div><div class="v ' + tone + '">' + esc(it.value) + "</div>";
-      return it.mint ? '<a class="' + cls + '" href="#/coin/' + esc(it.mint) + '">' + inner + "</a>" : '<div class="' + cls + '">' + inner + "</div>";
-    }).join("") + "</div>";
+    h += '<div class="card">' + items.map(actRow).join("") + "</div>";
     $view.innerHTML = h;
+  }
+  function actRow(it) {
+    var cls = it.tone === "kill" ? "row kill" : "row", tone = it.tone === "good" ? "up" : it.tone === "bad" ? "down" : "mut";
+    var inner = '<div><div class="t">' + esc(it.title) + '</div><div class="s">' + esc(it.subtitle) + " · " + hhmm(it.ts) + '</div></div><div class="v ' + tone + '">' + esc(it.value) + "</div>";
+    return it.mint ? '<a class="' + cls + '" href="#/coin/' + esc(it.mint) + '">' + inner + "</a>" : '<div class="' + cls + '">' + inner + "</div>";
   }
 
   // ---- Account (read-only on plan B) ----
@@ -188,7 +198,7 @@
         return kv(n, l ? '<span class="' + (l.pass ? "up" : "down") + '">' + (l.pass ? "✓ " : "✕ ") + esc(l.value) + "</span>" : '<span class="mut">not checked</span>', true);
       }).join("") + "</div>";
     }
-    if (c.verdict) h += '<h2>Analyst</h2><div class="card">' + ring(c.verdict.score, 70) + "</div>";
+    if (c.verdict) h += '<h2>Analyst</h2><div class="card">' + ring(c.verdict.score, (S.state.agents.analyst.card || {}).passMark || 70) + (c.verdict.failed && c.verdict.failed.length ? '<div class="small mut">' + esc(c.verdict.failed.join(" · ")) + "</div>" : "") + "</div>";
     h += '<a class="btn" href="' + esc(c.link) + '" target="_blank" rel="noopener">Open on FOMO</a>';
     $view.innerHTML = h;
     if (pr.length > 1) {
