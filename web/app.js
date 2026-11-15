@@ -77,7 +77,18 @@
   function render() {
     chrome();
     var r = route();
-    if (!dataPath()) { $view.innerHTML = '<div class="card">' + emptyBox("🔗", "Open your desk link", "This app needs the private link from your desk (it ends with <code>#d=…</code>). Ask the desk on Telegram for <b>link</b>, then open it on this phone and add it to your Home Screen.") + "</div>"; return; }
+    if (!dataPath()) {
+      if (document.getElementById("dcode")) return; // don't wipe what's being typed
+      $view.innerHTML = '<div class="card">' + emptyBox("🔗", "Open your desk link", "Paste the private link (or code) the desk sent you on Telegram, then tap Save. You only do this once.") +
+        '<div style="padding:0 16px 16px"><input id="dcode" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste link here" style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font-size:16px">' +
+        '<button id="dsave" style="margin-top:10px;width:100%;padding:12px;border-radius:12px;border:0;background:#22c55e;color:#000;font-weight:700;font-size:16px">Save</button><div id="derr" style="color:#f87171;margin-top:8px;font-size:14px"></div></div></div>';
+      document.getElementById("dsave").onclick = function () {
+        var v = document.getElementById("dcode").value.trim(); var mm = v.match(/(?:[?#&]d=)?([A-Za-z0-9_-]{32,})/);
+        if (!mm) { document.getElementById("derr").textContent = "That doesn't look like the desk link. Copy the whole link from Telegram."; return; }
+        try { localStorage.setItem("desk.d", mm[1]); } catch (e) {} location.reload();
+      };
+      return;
+    }
     if (!S.loaded || (!S.state && !S.err)) { $view.innerHTML = skeleton(); return; }
     if (!S.state) { $view.innerHTML = '<div class="card">' + emptyBox("⚠️", offlineText(), "If the desk just started, the first publish can take 2–3 minutes.") + "</div>"; return; }
     if (r.coin) return renderCoin(r.coin);
