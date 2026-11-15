@@ -10,8 +10,10 @@
 
   // ---- data path: arrives once as #d=<path>, then lives in localStorage (never sent anywhere else) ----
   (function () {
-    var m = location.hash.match(/[#&]d=([A-Za-z0-9_-]{32,})/);
-    if (m) { try { localStorage.setItem("desk.d", m[1]); } catch (e) {} history.replaceState(null, "", location.pathname + "#/home"); }
+    // Accept ?d= (kept by iPhone "Add to Home Screen") or #d=. The URL is left as-is so the
+    // home-screen copy keeps it (iOS home-screen apps get their own empty localStorage).
+    var m = location.search.match(/[?&]d=([A-Za-z0-9_-]{32,})/) || location.hash.match(/[#&]d=([A-Za-z0-9_-]{32,})/);
+    if (m) { try { localStorage.setItem("desk.d", m[1]); } catch (e) {} }
   })();
   function dataPath() { try { return localStorage.getItem("desk.d"); } catch (e) { return null; } }
   function url(f) { return "d/" + dataPath() + "/" + f + "?t=" + Date.now(); }
