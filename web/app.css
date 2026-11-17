@@ -139,3 +139,4 @@ code{background:var(--card3);padding:1px 6px;border-radius:6px;font-size:12px}
 .tsum b{display:block;font-size:16px;font-weight:800;letter-spacing:-.3px;white-space:nowrap}
 .tsum span{font-size:10.5px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
 .row.trade .mid .s+.s{margin-top:1px}
+.row .v .s.up{color:var(--green)}.row .v .s.down{color:var(--red)}
