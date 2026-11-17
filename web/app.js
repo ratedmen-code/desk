@@ -38,7 +38,7 @@
   function haptic() { try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) {} }
 
   function getJSON(f) {
-    return fetch(url(f), { cache: "no-store" }).then(function (r) {
+    return fetch(url(f), { cache: "no-store", headers: { "Cache-Control": "no-cache" } }).then(function (r) {
       if (!r.ok) throw new Error(r.status === 404 ? "no data yet (404)" : "HTTP " + r.status);
       return r.json();
     });
@@ -132,6 +132,7 @@
     h += "<h2>Open positions <span class=\"small mut\" style=\"font-weight:600\">" + st.positions.length + "</span></h2>";
     h += st.positions.length ? st.positions.map(posCard).join("") : '<div class="card">' + emptyBox("🛡️", "No open positions", "When a coin passes all checks the Executor buys it and Risk guards it here with stop, target and trail.") + "</div>";
     h += '<h2>Agents <a href="#/agents">Details ›</a></h2>' + agentGrid();
+    h += tradesSection();
     var acts = feedItems().slice(0, 8);
     h += '<h2>Activity <a href="#/activity">See all ›</a></h2>';
     h += '<div class="card list">' + (acts.length ? acts.map(actRow).join("") : emptyBox("🌙", "Nothing yet", "Scans, rejections, buys and sells land here as the desk works.")) + "</div>";
@@ -197,6 +198,35 @@
       '<div class="bar">' + (en ? '<span class="en" style="left:' + pos(en) + '%"></span>' : "") + (cur != null ? '<span class="mk" style="left:' + pos(cur) + '%"></span>' : "") + "</div>" +
       '<div class="barl num"><span class="down">' + (p.trailActive ? "Trail " : "Stop ") + price(stop) + '</span><span>Now ' + price(cur) + '</span><span class="up">' + (p.tpDone ? "Peak " + price(p.peakPrice) : "2x " + price(tgt)) + "</span></div></a>";
   }
+
+  function dayTime(ts) {
+    if (!ts) return "—";
+    var d = new Date(ts * 1000), t = new Date(), y = new Date(Date.now() - 86400000);
+    var day = d.toDateString() === t.toDateString() ? "" : d.toDateString() === y.toDateString() ? "Yesterday " : d.toLocaleDateString([], { day: "numeric", month: "short" }) + " ";
+    return day + hhmm(ts);
+  }
+  function tradesSection() {
+    var T = S.state.trades; if (!T) return "";
+    var it = T.items || [], sm = T.summary || {};
+    var h = '<h2>Trades <span class="small mut" style="font-weight:600">' + it.length + "</span></h2>";
+    if (!it.length) return h + '<div class="card">' + emptyBox("💹", "No trades yet", "Every buy and sell the desk makes shows up here, open ones first.") + "</div>";
+    var tot = sm.totalPnl || 0;
+    h += '<div class="card tsum num"><div><b class="' + (tot > 0 ? "up" : tot < 0 ? "down" : "") + '">' + sgnUsd(tot) + '</b><span>' + (sm.mode === "LIVE" ? "Live" : "Paper") + ' P&amp;L</span></div>' +
+      "<div><b>" + (sm.wins || 0) + "W · " + (sm.losses || 0) + "L</b><span>" + (sm.closed || 0) + " closed</span></div>" +
+      "<div><b>" + (sm.winRate == null ? "—" : sm.winRate.toFixed(0) + "%") + "</b><span>Win rate</span></div>" +
+      "<div><b>" + (sm.open || 0) + "</b><span>Open</span></div></div>";
+    return h + '<div class="card list">' + it.map(tradeRow).join("") + "</div>";
+  }
+  function tradeRow(t) {
+    var up = (t.pnlUsd || 0) > 0, cls = t.pnlUsd == null ? "mut" : up ? "up" : "down";
+    var badge = '<span class="tag ' + (t.mode === "LIVE" ? "r" : "o") + '">' + esc(t.mode) + "</span>" + (t.status === "open" ? '<span class="tag g">Open</span>' : "") + (t.tpDone ? '<span class="tag c">Half sold</span>' : "");
+    var line1 = "Bought " + dayTime(t.openedAt) + " · " + usd(t.sizeUsd);
+    var line2 = t.status === "open" ? (t.exiting ? "Selling…" : "Risk guarding · live P&L") : "Sold " + dayTime(t.closedAt) + " · " + esc(t.exitText || t.exitReason || "sold");
+    return '<a class="row trade" href="#/coin/' + esc(t.mint) + '"><span class="av ' + (t.status === "open" ? "n" : up ? "g" : "k") + '">' + (t.status === "open" ? "●" : up ? "↑" : "↓") + '</span>' +
+      '<div class="mid"><div class="t">' + esc(t.name) + badge + '</div><div class="s num">' + line1 + '</div><div class="s num">' + line2 + "</div></div>" +
+      '<div class="v num ' + cls + '">' + (t.pnlUsd == null ? "—" : sgnUsd(t.pnlUsd)) + '<div class="s ' + cls + '" style="font-weight:700">' + pct(t.pct) + "</div></div></a>";
+  }
+  function tradeFor(m) { var it = (S.state && S.state.trades && S.state.trades.items) || []; return it.filter(function (t) { return t.mint === m; })[0]; }
 
   function agentLine(key) {
     var a = S.state.agents[key] || {}, c = a.card || {}, r = S.state.rules || {}, val = "", sub = "", extra = "";
@@ -288,10 +318,17 @@
   function renderCoin(m) {
     var c = S.coin[m], h = '<a class="back" href="javascript:history.back()">‹ Back</a>';
     if (!c) { $view.innerHTML = h + skeleton(); return; }
-    if (c.error) { $view.innerHTML = h + '<div class="card">' + emptyBox("🔍", "No data for this coin", "It may be older than 24h (" + esc(c.error) + ").") + "</div>"; return; }
+    var tr = tradeFor(m);
+    if (c.error) {
+      $view.innerHTML = h + (tr ? '<div class="card list">' + tradeRow(tr) + "</div>" : "") + '<div class="card">' + emptyBox("🔍", "No chart data for this coin", "It may be older than 24h (" + esc(c.error) + ").") + "</div>" +
+        (tr && tr.link ? '<a class="btn" href="' + esc(tr.link) + '" target="_blank" rel="noopener">Open on FOMO</a>' : "");
+      return;
+    }
     var pr = c.prices || [], last = pr.length ? pr[pr.length - 1][1] : null, pos = c.position, ch = pr.length > 1 ? (last / pr[0][1] - 1) * 100 : null;
     h += '<div class="card hero"><div class="lbl">' + esc(c.symbol || "") + " · " + (c.holders != null ? c.holders + " holders" : "holders n/a") + '</div><div class="big" style="font-size:34px">' + esc(c.name || m.slice(0, 8)) + '</div><span class="delta ' + (ch == null ? "flat" : ch >= 0 ? "up" : "down") + ' num">' + price(last) + (ch == null ? "" : " · " + pct(ch)) + "</span>" +
       '<div class="chartwrap">' + (pr.length > 1 ? '<canvas class="chart" id="cc"></canvas><div class="tip num" id="tip"></div>' : '<div class="empty small">Price line starts with the Scanner\'s first read.</div>') + "</div></div>";
+    if (tr) h += '<h2>Your trade</h2><div class="card list">' + tradeRow(tr).replace('<a class="row trade" href="#/coin/' + esc(tr.mint) + '">', '<div class="row trade">').replace(/<\/a>$/, "</div>") +
+      kv("Entry", price(tr.entryPrice)) + (tr.exitPrice ? kv("Exit", price(tr.exitPrice)) : "") + "</div>";
     if (c.scan) h += '<h2>Scanner</h2><div class="card list">' + kv("Verdict", c.scan.verdict || "—") + kv("Reason", c.scan.reason || "—") + (c.scan.liquidityUsd != null ? kv("Liquidity", usd(c.scan.liquidityUsd, 0)) : "") + "</div>";
     if (c.audit && c.audit.layers) {
       h += '<h2>Audit</h2><div class="card list">' + LAYERS.map(function (n, i) {

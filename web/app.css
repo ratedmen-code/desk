@@ -134,3 +134,8 @@ details summary::-webkit-details-marker{display:none}
 input.field{width:100%;padding:14px;border-radius:14px;border:.5px solid rgba(255,255,255,.14);background:var(--card2);color:#fff;font:16px var(--font);outline:none}
 input.field:focus{border-color:var(--green)}
 code{background:var(--card3);padding:1px 6px;border-radius:6px;font-size:12px}
+.tsum{display:grid;grid-template-columns:1.3fr 1fr 1fr .7fr;gap:6px;padding:12px}
+.tsum div{background:var(--card2);border-radius:12px;padding:8px 6px;text-align:center}
+.tsum b{display:block;font-size:16px;font-weight:800;letter-spacing:-.3px;white-space:nowrap}
+.tsum span{font-size:10.5px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.row.trade .mid .s+.s{margin-top:1px}
